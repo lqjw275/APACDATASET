@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APAC Macro Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0b0f1a;
+  --bg-card: #111827;
+  --bg-card-hover: #1a2235;
+  --bg-surface: #151d2e;
+  --border: #1e293b;
+  --border-accent: #2d3a52;
+  --text: #e2e8f0;
+  --text-muted: #8896ab;
+  --text-dim: #5a6a80;
+  --accent: #60a5fa;
+  --accent-glow: rgba(96, 165, 250, 0.15);
+  --green: #34d399;
+  --red: #f87171;
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'DM Sans', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+.app { max-width: 1280px; margin: 0 auto; padding: 0 24px 40px; }
+
+/* Header */
+.header { padding: 28px 0 20px; border-bottom: 1px solid var(--border); }
+.header-content { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.header-left { display: flex; align-items: center; gap: 14px; }
+.header-icon { width: 44px; height: 44px; border-radius: var(--radius); background: linear-gradient(135deg, #60a5fa, #818cf8); display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0; }
+.header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+.subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; letter-spacing: 1px; font-weight: 500; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.last-update { font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.status-dot.loading { background: var(--accent); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* Nav */
+.nav { display: flex; gap: 4px; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 24px; overflow-x: auto; }
+.nav-btn { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; padding: 8px 18px; border-radius: 100px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.nav-btn:hover { color: var(--text); background: var(--bg-surface); }
+.nav-btn.active { color: var(--accent); background: var(--accent-glow); border-color: rgba(96, 165, 250, 0.25); }
+
+/* FX Cards */
+.fx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; margin-top: 16px; }
+.fx-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; transition: all 0.2s; }
+.fx-card:hover { border-color: var(--border-accent); background: var(--bg-card-hover); transform: translateY(-1px); }
+.fx-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.fx-flag { font-size: 20px; }
+.fx-currency { font-size: 12px; font-weight: 600; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
+.fx-rate { font-size: 22px; font-weight: 700; font-family: 'JetBrains Mono', monospace; letter-spacing: -0.5px; }
+.fx-country { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+/* Chart */
+.chart-section { margin-top: 32px; }
+.chart-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.section-title { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+.chart-container { position: relative; height: 420px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+
+/* Currency toggle */
+.currency-toggle { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggle-btn { font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 100px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+.toggle-btn:hover { border-color: var(--border-accent); color: var(--text); }
+.toggle-btn.active { background: var(--accent-glow); border-color: rgba(96, 165, 250, 0.3); color: var(--accent); }
+
+/* Table */
+.table-title { font-size: 14px; font-weight: 600; color: var(--text-muted); margin: 32px 0 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.table-wrapper { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 10px 14px; background: var(--bg-surface); color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255, 255, 255, 0.02); }
+td.positive { color: var(--green); }
+td.negative { color: var(--red); }
+.country-cell { font-family: 'DM Sans', sans-serif; font-weight: 500; color: var(--text); }
+
+/* Alert */
+.alert { background: rgba(96, 165, 250, 0.08); border: 1px solid rgba(96, 165, 250, 0.2); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px; font-size: 14px; line-height: 1.6; }
+.alert strong { color: var(--accent); }
+.alert p { color: var(--text-muted); margin-top: 6px; }
+.alert code { background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.alert a { color: var(--accent); text-decoration: none; display: inline-block; margin-top: 8px; font-weight: 500; }
+
+/* Note & Footer */
+.note { font-size: 12px; color: var(--text-dim); margin-top: 12px; font-style: italic; }
+.footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; }
+.footer p { font-size: 12px; color: var(--text-dim); letter-spacing: 0.3px; }
+
+/* Loading */
+.loading-msg { display: flex; align-items: center; justify-content: center; height: 300px; color: var(--text-dim); font-size: 14px; flex-direction: column; gap: 12px; }
+.spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Key input section */
+.key-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 24px; }
+.key-row { display: flex; gap: 10px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+.key-input { font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 8px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-surface); color: var(--text); flex: 1; min-width: 200px; outline: none; }
+.key-input:focus { border-color: var(--accent); }
+.key-btn { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; padding: 8px 20px; border-radius: var(--radius-sm); border: none; background: var(--accent); color: #0b0f1a; cursor: pointer; transition: all 0.2s; }
+.key-btn:hover { background: #93c5fd; }
+.key-status { font-size: 12px; color: var(--green); margin-top: 8px; }
+.key-status.error { color: var(--red); }
+
+@media (max-width: 768px) {
+  .app { padding: 0 16px 32px; }
+  .header h1 { font-size: 18px; }
+  .fx-cards { grid-template-columns: repeat(2, 1fr); }
+  .chart-header { flex-direction: column; align-items: flex-start; }
+  .header-right { display: none; }
+  .chart-container { height: 320px; padding: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="header-left">
+        <div class="header-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div>
+          <h1>APAC Macro Dashboard</h1>
+          <p class="subtitle">SG · JP · AU · KR · ID · PH · VN · MY</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="last-update" id="lastUpdate"></span>
+        <span class="status-dot" id="statusDot"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- API Key Section -->
+  <div class="key-section" id="keySection">
+    <strong style="color: var(--accent);">Enter your ExchangeRate-API key</strong>
+    <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">Free sign-up at <a href="https://www.exchangerate-api.com/" target="_blank" style="color: var(--accent);">exchangerate-api.com</a> — your key stays in your browser only.</p>
+    <div class="key-row">
+      <input type="text" class="key-input" id="apiKeyInput" placeholder="Paste your API key here...">
+      <button class="key-btn" onclick="saveKeyAndFetch()">Save & Load FX</button>
+    </div>
+    <div id="keyStatus"></div>
+  </div>
+
+  <!-- Nav -->
+  <nav class="nav">
+    <button class="nav-btn active" onclick="switchTab('fx', this)">FX Rates</button>
+    <button class="nav-btn" onclick="switchTab('inflation', this)">Inflation</button>
+    <button class="nav-btn" onclick="switchTab('interestRate', this)">Interest Rate</button>
+    <button class="nav-btn" onclick="switchTab('gdpGrowth', this)">GDP Growth</button>
+  </nav>
+
+  <!-- FX Tab -->
+  <div class="tab-content active" id="tab-fx">
+    <h2 class="section-title">Live EUR Exchange Rates</h2>
+    <div class="fx-cards" id="fxCards">
+      <div class="loading-msg"><div class="spinner"></div><span>Waiting for API key...</span></div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-header">
+        <h2 class="section-title">EUR/APAC — 6 Month Trend</h2>
+        <div class="currency-toggle" id="fxToggle"></div>
+      </div>
+      <div class="chart-container"><canvas id="fxChart"></canvas></div>
+      <p class="note">Historical data from ECB via Frankfurter. Some currencies (e.g. VND, PHP) may not be available in historical data.</p>
+    </div>
+  </div>
+
+  <!-- Inflation Tab -->
+  <div class="tab-content" id="tab-inflation">
+    <div class="chart-header">
+      <h2 class="section-title">Inflation (CPI, Annual %)</h2>
+    </div>
+    <div class="chart-container"><canvas id="inflationChart"></canvas></div>
+    <h3 class="table-title">Latest Data</h3>
+    <div class="table-wrapper" id="inflationTable"></div>
+    <p class="note">Source: World Bank Open Data</p>
+  </div>
+
+  <!-- Interest Rate Tab -->
+  <div class="tab-content" id="tab-interestRate">
+    <div class="chart-header">
+      <h2 class="section-title">Lending Interest Rate (%)</h2>
+    </div>
+    <div class="chart-container"><canvas id="interestRateChart"></canvas></div>
+    <h3 class="table-title">Latest Data</h3>
+    <div class="table-wrapper" id="interestRateTable"></div>
+    <p class="note">Source: World Bank Open Data</p>
+  </div>
+
+  <!-- GDP Tab -->
+  <div class="tab-content" id="tab-gdpGrowth">
+    <div class="chart-header">
+      <h2 class="section-title">GDP Growth (Annual %)</h2>
+    </div>
+    <div class="chart-container"><canvas id="gdpGrowthChart"></canvas></div>
+    <h3 class="table-title">Latest Data</h3>
+    <div class="table-wrapper" id="gdpGrowthTable"></div>
+    <p class="note">Source: World Bank Open Data</p>
+  </div>
+
+  <footer class="footer">
+    <p>Data: World Bank · ECB (Frankfurter) · ExchangeRate-API</p>
+  </footer>
+</div>
+
+<script>
+// ========== CONFIG ==========
+const COUNTRIES = {
+  SGP: { name: 'Singapore', currency: 'SGD', flag: '🇸🇬' },
+  JPN: { name: 'Japan', currency: 'JPY', flag: '🇯🇵' },
+  AUS: { name: 'Australia', currency: 'AUD', flag: '🇦🇺' },
+  KOR: { name: 'South Korea', currency: 'KRW', flag: '🇰🇷' },
+  IDN: { name: 'Indonesia', currency: 'IDR', flag: '🇮🇩' },
+  PHL: { name: 'Philippines', currency: 'PHP', flag: '🇵🇭' },
+  VNM: { name: 'Vietnam', currency: 'VND', flag: '🇻🇳' },
+  MYS: { name: 'Malaysia', currency: 'MYR', flag: '🇲🇾' },
+};
+
+const COLORS = {
+  SGP: '#e74c3c', JPN: '#3498db', AUS: '#2ecc71', KOR: '#9b59b6',
+  IDN: '#f39c12', PHL: '#1abc9c', VNM: '#e67e22', MYS: '#34495e',
+};
+
+const FX_CURRENCIES = ['SGD', 'JPY', 'AUD', 'KRW', 'IDR', 'PHP', 'VND', 'MYR'];
+const WB_CODES = 'SGP;JPN;AUS;KOR;IDN;PHL;VNM;MYS';
+
+const INDICATORS = {
+  inflation: 'FP.CPI.TOTL.ZG',
+  interestRate: 'FR.INR.LEND',
+  gdpGrowth: 'NY.GDP.MKTP.KD.ZG',
+};
+
+let fxChartInstance = null;
+let macroCharts = {};
+let selectedFxCurrencies = ['SGD', 'JPY', 'AUD', 'MYR'];
+let fxHistoryData = null;
+
+// ========== TAB SWITCHING ==========
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tabId).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ========== API KEY ==========
+function saveKeyAndFetch() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) return;
+  localStorage.setItem('fx_api_key', key);
+  document.getElementById('keyStatus').innerHTML = '<p class="key-status">Key saved! Fetching rates...</p>';
+  fetchLiveFX(key);
+}
+
+// Load saved key on start
+(function() {
+  const saved = localStorage.getItem('fx_api_key');
+  if (saved) {
+    document.getElementById('apiKeyInput').value = saved;
+    document.getElementById('keyStatus').innerHTML = '<p class="key-status">Key loaded from browser storage</p>';
+    fetchLiveFX(saved);
+  }
+})();
+
+// ========== FX: LIVE RATES ==========
+async function fetchLiveFX(apiKey) {
+  try {
+    const res = await fetch(`https://v6.exchangerate-api.com/v6/${apiKey}/latest/EUR`);
+    const data = await res.json();
+
+    if (data.result === 'error') {
+      document.getElementById('keyStatus').innerHTML = `<p class="key-status error">Error: ${data['error-type']}</p>`;
+      return;
+    }
+
+    document.getElementById('keySection').style.display = 'none';
+    document.getElementById('lastUpdate').textContent = 'FX: ' + new Date(data.time_last_update_utc).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    document.getElementById('statusDot').className = 'status-dot';
+
+    let html = '';
+    FX_CURRENCIES.forEach(c => {
+      const rate = data.conversion_rates[c];
+      const country = Object.values(COUNTRIES).find(v => v.currency === c);
+      if (rate && country) {
+        html += `
+          <div class="fx-card">
+            <div class="fx-card-header">
+              <span class="fx-flag">${country.flag}</span>
+              <span class="fx-currency">EUR/${c}</span>
+            </div>
+            <div class="fx-rate">${rate.toFixed(4)}</div>
+            <div class="fx-country">${country.name}</div>
+          </div>`;
+      }
+    });
+    document.getElementById('fxCards').innerHTML = html;
+  } catch (e) {
+    document.getElementById('keyStatus').innerHTML = '<p class="key-status error">Network error. Check your connection.</p>';
+  }
+}
+
+// ========== FX: HISTORICAL (Frankfurter — free, no key) ==========
+async function fetchHistoricalFX() {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 180);
+  const fmt = d => d.toISOString().split('T')[0];
+
+  try {
+    const res = await fetch(`https://api.frankfurter.app/${fmt(start)}..${fmt(end)}?from=EUR&to=${FX_CURRENCIES.join(',')}`);
+    const data = await res.json();
+
+    const dates = Object.keys(data.rates).sort();
+    const availableCurrencies = Object.keys(data.rates[dates[0]] || {});
+
+    fxHistoryData = { dates, rates: data.rates, availableCurrencies };
+    buildFxToggle(availableCurrencies);
+    renderFxChart();
+  } catch (e) {
+    console.error('Historical FX error:', e);
+  }
+}
+
+function buildFxToggle(available) {
+  const container = document.getElementById('fxToggle');
+  let html = '';
+  FX_CURRENCIES.forEach(c => {
+    const country = Object.values(COUNTRIES).find(v => v.currency === c);
+    const isAvailable = available.includes(c);
+    const isActive = selectedFxCurrencies.includes(c) && isAvailable;
+    html += `<button class="toggle-btn ${isActive ? 'active' : ''}" ${!isAvailable ? 'disabled style="opacity:0.3"' : ''} onclick="toggleFxCurrency('${c}', this)">${country?.flag || ''} ${c}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+function toggleFxCurrency(currency, btn) {
+  if (selectedFxCurrencies.includes(currency)) {
+    if (selectedFxCurrencies.length > 1) {
+      selectedFxCurrencies = selectedFxCurrencies.filter(c => c !== currency);
+      btn.classList.remove('active');
+    }
+  } else {
+    selectedFxCurrencies.push(currency);
+    btn.classList.add('active');
+  }
+  renderFxChart();
+}
+
+function renderFxChart() {
+  if (!fxHistoryData) return;
+  const { dates, rates, availableCurrencies } = fxHistoryData;
+  const active = selectedFxCurrencies.filter(c => availableCurrencies.includes(c));
+
+  const datasets = active.map(currency => {
+    const countryEntry = Object.entries(COUNTRIES).find(([, v]) => v.currency === currency);
+    const code = countryEntry ? countryEntry[0] : currency;
+    return {
+      label: `${COUNTRIES[code]?.flag || ''} ${currency}`,
+      data: dates.map(d => rates[d]?.[currency] ?? null),
+      borderColor: COLORS[code] || '#999',
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHitRadius: 10,
+      tension: 0.3,
+      spanGaps: true,
+    };
+  });
+
+  if (fxChartInstance) fxChartInstance.destroy();
+
+  fxChartInstance = new Chart(document.getElementById('fxChart'), {
+    type: 'line',
+    data: { labels: dates, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8896ab', font: { family: "'DM Sans'", size: 12 } } },
+        tooltip: {
+          backgroundColor: '#111827',
+          borderColor: '#2d3a52',
+          borderWidth: 1,
+          titleColor: '#e2e8f0',
+          bodyColor: '#8896ab',
+          titleFont: { family: "'JetBrains Mono'", size: 12 },
+          bodyFont: { family: "'JetBrains Mono'", size: 11 },
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(4)}` }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8896ab', font: { size: 11 }, maxTicksLimit: 12,
+            callback: function(val) { const d = new Date(this.getLabelForValue(val)); return `${d.getDate()}/${d.getMonth()+1}`; }
+          },
+          grid: { color: 'rgba(255,255,255,0.04)' }
+        },
+        y: { ticks: { color: '#8896ab', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+      }
+    }
+  });
+}
+
+// ========== WORLD BANK MACRO DATA ==========
+async function fetchWorldBank(indicatorCode) {
+  const year = new Date().getFullYear();
+  const url = `https://api.worldbank.org/v2/country/${WB_CODES}/indicator/${indicatorCode}?format=json&per_page=500&date=2010:${year}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data[1]) return [];
+    return data[1].filter(d => d.value !== null).map(d => ({
+      country: d.countryiso3code,
+      year: parseInt(d.date),
+      value: parseFloat(d.value.toFixed(2)),
+    }));
+  } catch (e) {
+    console.error(`WB error for ${indicatorCode}:`, e);
+    return [];
+  }
+}
+
+function pivotByYear(raw) {
+  const years = [...new Set(raw.map(d => d.year))].sort();
+  const countries = Object.keys(COUNTRIES);
+  return years.map(year => {
+    const row = { year };
+    countries.forEach(c => {
+      const entry = raw.find(d => d.year === year && d.country === c);
+      row[c] = entry ? entry.value : null;
+    });
+    return row;
+  });
+}
+
+function renderMacroChart(canvasId, data, label) {
+  const countries = Object.keys(COUNTRIES);
+  const years = data.map(d => d.year);
+
+  const datasets = countries.map(code => ({
+    label: `${COUNTRIES[code].flag} ${COUNTRIES[code].name}`,
+    data: data.map(d => d[code]),
+    borderColor: COLORS[code],
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    pointRadius: 0,
+    pointHitRadius: 10,
+    tension: 0.3,
+    spanGaps: true,
+  }));
+
+  if (macroCharts[canvasId]) macroCharts[canvasId].destroy();
+
+  macroCharts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type: 'line',
+    data: { labels: years, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8896ab', font: { family: "'DM Sans'", size: 12 } } },
+        tooltip: {
+          backgroundColor: '#111827',
+          borderColor: '#2d3a52',
+          borderWidth: 1,
+          titleColor: '#e2e8f0',
+          bodyColor: '#8896ab',
+          titleFont: { family: "'JetBrains Mono'", size: 12 },
+          bodyFont: { family: "'JetBrains Mono'", size: 11 },
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}%` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#8896ab', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: {
+          ticks: { color: '#8896ab', font: { size: 11 }, callback: v => v + '%' },
+          grid: { color: 'rgba(255,255,255,0.04)' }
+        }
+      }
+    }
+  });
+}
+
+function renderMacroTable(containerId, data) {
+  const countries = Object.keys(COUNTRIES);
+  const latest = data.slice(-5);
+
+  let html = '<table><thead><tr><th>Country</th>';
+  latest.forEach(d => { html += `<th>${d.year}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  countries.forEach(code => {
+    html += `<tr><td class="country-cell">${COUNTRIES[code].flag} ${COUNTRIES[code].name}</td>`;
+    latest.forEach(d => {
+      const val = d[code];
+      const cls = val != null ? (val >= 0 ? 'positive' : 'negative') : '';
+      html += `<td class="${cls}">${val != null ? val.toFixed(1) + '%' : '—'}</td>`;
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById(containerId).innerHTML = html;
+}
+
+// ========== INIT ==========
+async function init() {
+  document.getElementById('statusDot').className = 'status-dot loading';
+
+  // Fetch all in parallel
+  const [inflation, interestRate, gdpGrowth] = await Promise.all([
+    fetchWorldBank(INDICATORS.inflation),
+    fetchWorldBank(INDICATORS.interestRate),
+    fetchWorldBank(INDICATORS.gdpGrowth),
+    fetchHistoricalFX(),
+  ]);
+
+  const inflationPivoted = pivotByYear(inflation);
+  const interestPivoted = pivotByYear(interestRate);
+  const gdpPivoted = pivotByYear(gdpGrowth);
+
+  renderMacroChart('inflationChart', inflationPivoted, 'Inflation');
+  renderMacroTable('inflationTable', inflationPivoted);
+
+  renderMacroChart('interestRateChart', interestPivoted, 'Interest Rate');
+  renderMacroTable('interestRateTable', interestPivoted);
+
+  renderMacroChart('gdpGrowthChart', gdpPivoted, 'GDP Growth');
+  renderMacroTable('gdpGrowthTable', gdpPivoted);
+
+  document.getElementById('statusDot').className = 'status-dot';
+}
+
+init();
+</script>
+</body>
+</html>
