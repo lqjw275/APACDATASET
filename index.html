@@ -1013,39 +1013,45 @@ function snapToData(e){
   const chart=charts.fx;
   if(!chart) return null;
   
-  const canvas=document.getElementById('fxChart');
-  const rect=canvas.getBoundingClientRect();
+  const chartCanvas=document.getElementById('fxChart');
+  const rect=chartCanvas.getBoundingClientRect();
   const cssX=e.clientX-rect.left;
   const cssY=e.clientY-rect.top;
+  const pixelX=cssX*(chartCanvas.width/rect.width);
+  const pixelY=cssY*(chartCanvas.height/rect.height);
   
-  // Get nearest elements from Chart.js
-  const elements=chart.getElementsAtEventForMode(e,'nearest',{intersect:false},true);
+  // Manually find nearest data point across all datasets
+  let best=null, bestDist=Infinity;
   
-  if(elements.length===0) return null;
+  chart.data.datasets.forEach((dataset,dsIdx)=>{
+    const meta=chart.getDatasetMeta(dsIdx);
+    if(meta.hidden) return;
+    
+    meta.data.forEach((point,ptIdx)=>{
+      const val=dataset.data[ptIdx];
+      if(val==null) return;
+      
+      const dx=point.x-pixelX, dy=point.y-pixelY;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      
+      if(dist<bestDist){
+        bestDist=dist;
+        best={
+          datasetIdx:dsIdx, dataIdx:ptIdx,
+          value:val,
+          date:chart.data.labels[ptIdx],
+          currency:dataset.label,
+          color:dataset.borderColor,
+          pixelX:point.x,
+          pixelY:point.y
+        };
+      }
+    });
+  });
   
-  const el=elements[0];
-  const datasetIdx=el.datasetIndex;
-  const dataIdx=el.index;
-  const dataset=chart.data.datasets[datasetIdx];
-  const value=dataset.data[dataIdx];
-  const label=chart.data.labels[dataIdx];
-  const meta=chart.getDatasetMeta(datasetIdx);
-  const point=meta.data[dataIdx];
-  
-  if(value==null||!point) return null;
-  
-  return {
-    datasetIdx, dataIdx,
-    value, date:label,
-    currency: dataset.label,
-    color: dataset.borderColor,
-    // Pixel position of the actual data point
-    pixelX: point.x,
-    pixelY: point.y,
-    // Percentage for overlay drawing
-    pctX: (point.x / canvas.width) * (canvas.width / rect.width) / (canvas.width / rect.width),
-    pctY: (point.y / canvas.height) * (canvas.height / rect.height) / (canvas.height / rect.height),
-  };
+  // Only snap if within 50px
+  if(!best||bestDist>50) return null;
+  return best;
 }
 
 // Convert chart pixel coords to overlay percentage
