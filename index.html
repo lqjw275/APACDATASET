@@ -235,12 +235,16 @@ const IR_LABELS = {
   PHL:'BSP Rate', MYS:'BNM OPR', SGP:'SORA/Interbank 3M', VNM:'Interbank 3M'
 };
 
-// FRED: Monthly CPI inflation (YoY growth rate from OECD)
+// FRED: Monthly CPI inflation (Consumer Prices, All items, YoY growth)
 const FRED_CPI={
-  SGP:'CPALTT01SGM659N',JPN:'CPALTT01JPM659N',AUS:'CPALTT01AUQ659N',
-  KOR:'CPALTT01KRM659N',IDN:'CPALTT01IDM659N',
-  // PHL, VNM, MYS — not in OECD MEI, may return empty
-  PHL:'CPALTT01PHM659N',VNM:'CPALTT01VNM659N',MYS:'CPALTT01MYM659N',
+  JPN:'JPNCPIALLMINMEI',
+  AUS:'AUSCPIALLQINMEI',
+  KOR:'KORCPIALLMINMEI',
+  IDN:'IDNCPIALLMINMEI',
+  SGP:'SGPCPIALLMINMEI',
+  MYS:'MYSCPIALLMINMEI',
+  PHL:'PHLCPIALLMINMEI',
+  VNM:'VNCPIALLMINMEI',
 };
 
 let charts={}, fxHistData=null, selFxCur=['USD','SGD','JPY','AUD','MYR'];
@@ -393,18 +397,28 @@ async function fetchHistFX(){
   const end=new Date(),start=new Date();
   start.setFullYear(start.getFullYear()-5);
   const fmt=d=>d.toISOString().split('T')[0];
-  try{
-    const r=await fetch(`/api/fx/${fmt(start)}..${fmt(end)}?from=EUR&to=${FX_CUR.join(',')}`);
-    if(!r.ok){console.error('FX hist HTTP',r.status);return;}
-    const d=await r.json();
-    if(!d.rates){console.error('FX hist: no rates');return;}
-    const dates=Object.keys(d.rates).sort();
-    const avail=Object.keys(d.rates[dates[0]]||{});
-    console.log('FX hist:',dates.length,'days,',avail.length,'currencies');
-    fxHistData={dates,rates:d.rates,avail};
-    buildFxCurrencyToggle(avail);
-    renderFxChart();
-  }catch(e){console.error('Hist FX:',e);}
+  const params=`${fmt(start)}..${fmt(end)}?from=EUR&to=${FX_CUR.join(',')}`;
+  
+  // Try proxy first, then direct
+  const urls=[`/api/fx/${params}`, `https://api.frankfurter.app/${params}`];
+  
+  for(const url of urls){
+    try{
+      console.log('FX hist: trying',url.substring(0,80));
+      const r=await fetch(url);
+      if(!r.ok){console.warn('FX hist HTTP',r.status,'for',url.substring(0,60));continue;}
+      const d=await r.json();
+      if(!d.rates||Object.keys(d.rates).length===0){console.warn('FX hist: empty rates');continue;}
+      const dates=Object.keys(d.rates).sort();
+      const avail=Object.keys(d.rates[dates[0]]||{});
+      console.log('FX hist: got',dates.length,'days,',avail.length,'currencies');
+      fxHistData={dates,rates:d.rates,avail};
+      buildFxCurrencyToggle(avail);
+      renderFxChart();
+      return;
+    }catch(e){console.warn('FX hist error:',e.message);}
+  }
+  console.error('FX hist: all attempts failed');
 }
 
 function buildFxCurrencyToggle(avail){
