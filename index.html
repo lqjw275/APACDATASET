@@ -74,6 +74,14 @@ td.positive{color:var(--green)}td.negative{color:var(--red)}
 .key-status{font-size:12px;color:var(--green);margin-top:8px}.key-status.error{color:var(--red)}
 .rate-type-label{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(96,165,250,0.1);color:var(--accent);font-weight:500}
 .empty-msg{padding:40px;text-align:center;color:var(--text-dim)}
+.draw-controls{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.draw-hint{font-size:12px;color:var(--text-dim);margin-left:8px}
+.draw-active{background:rgba(96,165,250,0.3) !important;border-color:var(--accent) !important;color:var(--accent) !important}
+.ruler-result{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 20px;margin-top:10px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;font-size:13px}
+.ruler-result .ruler-pct{font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.ruler-result .ruler-pct.up{color:var(--green)}.ruler-result .ruler-pct.down{color:var(--red)}
+.ruler-result .ruler-detail{color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:12px}
+.ruler-result .ruler-label{color:var(--text-dim);font-size:11px;margin-bottom:2px}
 .controls-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .error-banner{background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--red)}
 @media(max-width:768px){.app{padding:0 16px 32px}.header h1{font-size:18px}.fx-cards{grid-template-columns:repeat(2,1fr)}.chart-header{flex-direction:column;align-items:flex-start}.header-right{display:none}.chart-container{height:320px;padding:12px}}
@@ -133,7 +141,16 @@ td.positive{color:var(--green)}td.negative{color:var(--red)}
           <div class="currency-toggle" id="fxToggle"></div>
         </div>
       </div>
-      <div class="chart-container"><canvas id="fxChart"></canvas></div>
+      <div class="chart-container" style="position:relative">
+        <canvas id="fxChart"></canvas>
+        <canvas id="fxDrawOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10"></canvas>
+      </div>
+      <div class="draw-controls">
+        <button class="toggle-btn" id="rulerBtn" onclick="toggleRuler()">📏 Ruler</button>
+        <button class="toggle-btn" onclick="clearRuler()">✕ Clear</button>
+        <span class="draw-hint" id="rulerHint"></span>
+      </div>
+      <div class="ruler-result" id="rulerResult" style="display:none"></div>
       <p class="note">Source: ECB via Frankfurter. VND is not available in ECB historical data. Live VND rate shown in cards above (ExchangeRate-API).</p>
     </div>
   </div>
@@ -192,7 +209,12 @@ const C = {
   VNM:{name:'Vietnam',currency:'VND',flag:'🇻🇳'},MYS:{name:'Malaysia',currency:'MYR',flag:'🇲🇾'},
 };
 const CLR={SGP:'#e74c3c',JPN:'#3498db',AUS:'#2ecc71',KOR:'#9b59b6',IDN:'#f39c12',PHL:'#1abc9c',VNM:'#e67e22',MYS:'#34495e'};
-const FX_CUR=['SGD','JPY','AUD','KRW','IDR','PHP','VND','MYR'];
+const FX_CUR=['USD','SGD','JPY','AUD','KRW','IDR','PHP','VND','MYR'];
+// Extra FX currencies not in the main country map
+const FX_EXTRA={USD:{name:'United States',currency:'USD',flag:'🇺🇸',code:'USD'}};
+function fxInfo(currency){return Object.values(C).find(v=>v.currency===currency)||FX_EXTRA[currency]||null;}
+function fxCode(currency){const e=Object.entries(C).find(([,v])=>v.currency===currency);return e?e[0]:currency;}
+const FX_CLR={USD:'#6366f1',...CLR};
 const WB='SGP;JPN;AUS;KOR;IDN;PHL;VNM;MYS';
 const CODES=Object.keys(C);
 
@@ -221,7 +243,7 @@ const FRED_CPI={
   PHL:'CPALTT01PHM659N',VNM:'CPALTT01VNM659N',MYS:'CPALTT01MYM659N',
 };
 
-let charts={}, fxHistData=null, selFxCur=['SGD','JPY','AUD','MYR'];
+let charts={}, fxHistData=null, selFxCur=['USD','SGD','JPY','AUD','MYR'];
 
 // All data stored globally for time filtering
 let bisIRData=[], fredCPIData=[], wbGDPData=[];
@@ -360,7 +382,7 @@ async function fetchLiveFX(key){
     document.getElementById('lastUpdate').textContent='FX: '+new Date(d.time_last_update_utc).toLocaleDateString('en-SG',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
     let h='';
     FX_CUR.forEach(c=>{
-      const rate=d.conversion_rates[c],co=Object.values(C).find(v=>v.currency===c);
+      const rate=d.conversion_rates[c],co=fxInfo(c);
       if(rate&&co)h+=`<div class="fx-card"><div class="fx-card-header"><span class="fx-flag">${co.flag}</span><span class="fx-currency">EUR/${c}</span></div><div class="fx-rate">${rate.toFixed(4)}</div><div class="fx-country">${co.name}</div></div>`;
     });
     document.getElementById('fxCards').innerHTML=h;
@@ -387,7 +409,7 @@ async function fetchHistFX(){
 
 function buildFxCurrencyToggle(avail){
   let h='';FX_CUR.forEach(c=>{
-    const co=Object.values(C).find(v=>v.currency===c),ok=avail.includes(c),on=selFxCur.includes(c)&&ok;
+    const co=fxInfo(c),ok=avail.includes(c),on=selFxCur.includes(c)&&ok;
     h+=`<button class="toggle-btn ${on?'active':''}" ${ok?'':'disabled style="opacity:0.3"'} onclick="toggleFxCur('${c}',this)">${co?.flag||''} ${c}</button>`;
   });document.getElementById('fxToggle').innerHTML=h;
 }
@@ -418,8 +440,8 @@ function renderFxChart(){
   }
 
   const ds=active.map(cur=>{
-    const ce=Object.entries(C).find(([,v])=>v.currency===cur),code=ce?ce[0]:cur;
-    return{label:`${C[code]?.flag||''} ${cur}`,data:chartRatesArr.map(r=>r[cur]??null),borderColor:CLR[code]||'#999',backgroundColor:'transparent',borderWidth:2,pointRadius:freq==='yearly'?4:0,pointHitRadius:10,tension:0.3,spanGaps:true};
+    const code=fxCode(cur),co=fxInfo(cur);
+    return{label:`${co?.flag||''} ${cur}`,data:chartRatesArr.map(r=>r[cur]??null),borderColor:FX_CLR[code]||CLR[code]||'#999',backgroundColor:'transparent',borderWidth:2,pointRadius:freq==='yearly'?4:0,pointHitRadius:10,tension:0.3,spanGaps:true};
   });
   if(charts.fx)charts.fx.destroy();
   const xFmt=freq==='daily'?(v=>{const d=new Date(v);return d.getDate()+'/'+(d.getMonth()+1);}):
@@ -953,6 +975,239 @@ async function loadAllData(){
 
   await Promise.allSettled(tasks);
   document.getElementById('statusDot').className='status-dot';
+}
+
+// ========== RULER TOOL — SNAPS TO DATA POINTS ==========
+let rulerMode=false, rulerPointA=null, rulerLine=null;
+
+function toggleRuler(){
+  rulerMode=!rulerMode;
+  rulerPointA=null;
+  const btn=document.getElementById('rulerBtn');
+  const hint=document.getElementById('rulerHint');
+  const overlay=document.getElementById('fxDrawOverlay');
+  
+  if(rulerMode){
+    btn.classList.add('draw-active');
+    hint.textContent='Click a point on the chart...';
+    overlay.style.pointerEvents='auto';
+    overlay.style.cursor='crosshair';
+  } else {
+    btn.classList.remove('draw-active');
+    hint.textContent='';
+    overlay.style.pointerEvents='none';
+    overlay.style.cursor='default';
+  }
+}
+
+function clearRuler(){
+  rulerPointA=null;
+  rulerLine=null;
+  document.getElementById('rulerResult').style.display='none';
+  document.getElementById('rulerHint').textContent=rulerMode?'Click a point on the chart...':'';
+  redrawOverlay();
+}
+
+// Find the nearest actual data point to where the user clicked
+function snapToData(e){
+  const chart=charts.fx;
+  if(!chart) return null;
+  
+  const canvas=document.getElementById('fxChart');
+  const rect=canvas.getBoundingClientRect();
+  const cssX=e.clientX-rect.left;
+  const cssY=e.clientY-rect.top;
+  
+  // Get nearest elements from Chart.js
+  const elements=chart.getElementsAtEventForMode(e,'nearest',{intersect:false},true);
+  
+  if(elements.length===0) return null;
+  
+  const el=elements[0];
+  const datasetIdx=el.datasetIndex;
+  const dataIdx=el.index;
+  const dataset=chart.data.datasets[datasetIdx];
+  const value=dataset.data[dataIdx];
+  const label=chart.data.labels[dataIdx];
+  const meta=chart.getDatasetMeta(datasetIdx);
+  const point=meta.data[dataIdx];
+  
+  if(value==null||!point) return null;
+  
+  return {
+    datasetIdx, dataIdx,
+    value, date:label,
+    currency: dataset.label,
+    color: dataset.borderColor,
+    // Pixel position of the actual data point
+    pixelX: point.x,
+    pixelY: point.y,
+    // Percentage for overlay drawing
+    pctX: (point.x / canvas.width) * (canvas.width / rect.width) / (canvas.width / rect.width),
+    pctY: (point.y / canvas.height) * (canvas.height / rect.height) / (canvas.height / rect.height),
+  };
+}
+
+// Convert chart pixel coords to overlay percentage
+function chartToOverlayPct(chart, pixelX, pixelY){
+  const canvas=document.getElementById('fxChart');
+  const rect=canvas.getBoundingClientRect();
+  return {
+    pctX: pixelX / canvas.width,
+    pctY: pixelY / canvas.height
+  };
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const overlay=document.getElementById('fxDrawOverlay');
+  if(!overlay) return;
+  
+  overlay.addEventListener('click',(e)=>{
+    if(!rulerMode) return;
+    
+    const pt=snapToData(e);
+    if(!pt){
+      document.getElementById('rulerHint').textContent='No data point found — click closer to a line.';
+      return;
+    }
+    
+    const hint=document.getElementById('rulerHint');
+    
+    if(!rulerPointA){
+      rulerPointA=pt;
+      hint.textContent=`A: ${pt.value.toFixed(4)} (${pt.date}) — now click point B...`;
+      redrawOverlay();
+    } else {
+      // Calculate % change
+      const a=rulerPointA, b=pt;
+      const pctChange=((b.value-a.value)/a.value)*100;
+      const absChange=b.value-a.value;
+      
+      rulerLine={a,b,pctChange,absChange};
+      
+      // Show result panel
+      const isUp=pctChange>=0;
+      const sign=isUp?'+':'';
+      document.getElementById('rulerResult').style.display='flex';
+      document.getElementById('rulerResult').innerHTML=`
+        <div>
+          <div class="ruler-label">Change</div>
+          <div class="ruler-pct ${isUp?'up':'down'}">${sign}${pctChange.toFixed(2)}%</div>
+        </div>
+        <div>
+          <div class="ruler-label">From → To</div>
+          <div class="ruler-detail">${a.value.toFixed(4)} → ${b.value.toFixed(4)} (${sign}${absChange.toFixed(4)})</div>
+        </div>
+        <div>
+          <div class="ruler-label">Period</div>
+          <div class="ruler-detail">${a.date} → ${b.date}</div>
+        </div>
+        <div>
+          <div class="ruler-label">Series</div>
+          <div class="ruler-detail">${a.currency}${a.currency!==b.currency?' → '+b.currency:''}</div>
+        </div>
+      `;
+      
+      hint.textContent='Click a new point A, or Clear to reset.';
+      rulerPointA=null; // ready for next measurement
+      redrawOverlay();
+    }
+  });
+  
+  // Resize observer
+  const resizeObserver=new ResizeObserver(()=>{resizeOverlay();redrawOverlay();});
+  const container=overlay.parentElement;
+  if(container) resizeObserver.observe(container);
+});
+
+function resizeOverlay(){
+  const overlay=document.getElementById('fxDrawOverlay');
+  const container=overlay?.parentElement;
+  if(!overlay||!container) return;
+  overlay.width=container.clientWidth;
+  overlay.height=container.clientHeight;
+}
+
+function redrawOverlay(){
+  const overlay=document.getElementById('fxDrawOverlay');
+  if(!overlay) return;
+  resizeOverlay();
+  const ctx=overlay.getContext('2d');
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+  
+  const chart=charts.fx;
+  if(!chart) return;
+  const canvas=document.getElementById('fxChart');
+  
+  // Draw point A marker if waiting for B
+  if(rulerPointA){
+    const pct=chartToOverlayPct(chart,rulerPointA.pixelX,rulerPointA.pixelY);
+    const x=pct.pctX*overlay.width, y=pct.pctY*overlay.height;
+    
+    // Crosshair
+    ctx.strokeStyle='#60a5fa';
+    ctx.lineWidth=1;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,overlay.height);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(overlay.width,y);ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Dot
+    ctx.fillStyle='#60a5fa';
+    ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#0b0f1a';
+    ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();
+  }
+  
+  // Draw ruler line
+  if(rulerLine){
+    const a=chartToOverlayPct(chart,rulerLine.a.pixelX,rulerLine.a.pixelY);
+    const b=chartToOverlayPct(chart,rulerLine.b.pixelX,rulerLine.b.pixelY);
+    const x1=a.pctX*overlay.width, y1=a.pctY*overlay.height;
+    const x2=b.pctX*overlay.width, y2=b.pctY*overlay.height;
+    
+    const isUp=rulerLine.pctChange>=0;
+    const color=isUp?'#34d399':'#f87171';
+    
+    // Solid straight line
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);
+    ctx.strokeStyle=color;
+    ctx.lineWidth=2;
+    ctx.stroke();
+    
+    // Endpoint dots
+    [[x1,y1],[x2,y2]].forEach(([x,y])=>{
+      ctx.fillStyle=color;
+      ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#0b0f1a';
+      ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();
+    });
+    
+    // % label on the line
+    const midX=(x1+x2)/2, midY=Math.min(y1,y2)-14;
+    const sign=isUp?'+':'';
+    const text=`${sign}${rulerLine.pctChange.toFixed(2)}%`;
+    ctx.font='bold 12px "JetBrains Mono", monospace';
+    const tw=ctx.measureText(text).width;
+    
+    // Background pill
+    ctx.fillStyle='#111827';
+    ctx.beginPath();
+    ctx.roundRect(midX-tw/2-8, midY-10, tw+16, 22, 11);
+    ctx.fill();
+    ctx.strokeStyle=color;
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.roundRect(midX-tw/2-8, midY-10, tw+16, 22, 11);
+    ctx.stroke();
+    
+    // Text
+    ctx.fillStyle=color;
+    ctx.textAlign='center';
+    ctx.fillText(text, midX, midY+5);
+    ctx.textAlign='left';
+  }
 }
 </script>
 </body>
